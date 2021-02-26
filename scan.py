@@ -280,7 +280,7 @@ def lambda_handler(event, context):
             scan_result,
             scan_signature,
             result_time,
-            subject=os.environ.get("AV_STATUS_SNS_SUBJECT_TEMPLATE", None),
+            subject_template=os.environ.get("AV_STATUS_SNS_SUBJECT_TEMPLATE", None),
         )
 
     metrics.send(
