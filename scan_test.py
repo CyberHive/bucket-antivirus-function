@@ -455,6 +455,58 @@ class TestScan(unittest.TestCase):
                 self.sns_client, s3_obj, sns_arn, scan_result, scan_signature, timestamp
             )
 
+    def test_sns_scan_results_with_subject(self):
+        sns_stubber = Stubber(self.sns_client)
+        s3_stubber_resource = Stubber(self.s3.meta.client)
+
+        sns_arn = "some_arn"
+        version_id = "version-id"
+        scan_result = AV_STATUS_CLEAN
+        scan_signature = AV_SIGNATURE_OK
+        timestamp = get_timestamp()
+        subject_template = "scan result is {status}"
+        message = {
+            "bucket": self.s3_bucket_name,
+            "key": self.s3_key_name,
+            "version": version_id,
+            AV_SIGNATURE_METADATA: scan_signature,
+            AV_STATUS_METADATA: scan_result,
+            AV_TIMESTAMP_METADATA: timestamp,
+        }
+        publish_response = {"MessageId": "message_id"}
+        publish_expected_params = {
+            "TargetArn": sns_arn,
+            "Message": json.dumps({"default": json.dumps(message)}),
+            "MessageAttributes": {
+                "av-status": {"DataType": "String", "StringValue": scan_result},
+                "av-signature": {"DataType": "String", "StringValue": scan_signature},
+            },
+            "MessageStructure": "json",
+            "Subject": f"scan result is {AV_STATUS_CLEAN}",
+        }
+        sns_stubber.add_response("publish", publish_response, publish_expected_params)
+
+        head_object_response = {"VersionId": version_id}
+        head_object_expected_params = {
+            "Bucket": self.s3_bucket_name,
+            "Key": self.s3_key_name,
+        }
+        s3_stubber_resource.add_response(
+            "head_object", head_object_response, head_object_expected_params
+        )
+
+        with sns_stubber, s3_stubber_resource:
+            s3_obj = self.s3.Object(self.s3_bucket_name, self.s3_key_name)
+            sns_scan_results(
+                self.sns_client,
+                s3_obj,
+                sns_arn,
+                scan_result,
+                scan_signature,
+                timestamp,
+                subject_template=subject_template,
+            )
+
     def test_delete_s3_object(self):
         s3_stubber = Stubber(self.s3.meta.client)
         delete_object_response = {}

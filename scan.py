@@ -179,7 +179,13 @@ def sns_start_scan(sns_client, s3_object, scan_start_sns_arn, timestamp):
 
 
 def sns_scan_results(
-    sns_client, s3_object, sns_arn, scan_result, scan_signature, timestamp
+    sns_client,
+    s3_object,
+    sns_arn,
+    scan_result,
+    scan_signature,
+    timestamp,
+    subject_template=None,
 ):
     # Don't publish if scan_result is CLEAN and CLEAN results should not be published
     if scan_result == AV_STATUS_CLEAN and not str_to_bool(AV_STATUS_SNS_PUBLISH_CLEAN):
@@ -197,18 +203,21 @@ def sns_scan_results(
         AV_STATUS_METADATA: scan_result,
         AV_TIMESTAMP_METADATA: get_timestamp(),
     }
-    sns_client.publish(
-        TargetArn=sns_arn,
-        Message=json.dumps({"default": json.dumps(message)}),
-        MessageStructure="json",
-        MessageAttributes={
+    publish_data = {
+        "TargetArn": sns_arn,
+        "Message": json.dumps({"default": json.dumps(message)}),
+        "MessageStructure": "json",
+        "MessageAttributes": {
             AV_STATUS_METADATA: {"DataType": "String", "StringValue": scan_result},
             AV_SIGNATURE_METADATA: {
                 "DataType": "String",
                 "StringValue": scan_signature,
             },
         },
-    )
+    }
+    if subject_template:
+        publish_data["Subject"] = subject_template.format(status=scan_result)
+    sns_client.publish(**publish_data)
 
 
 def lambda_handler(event, context):
@@ -271,6 +280,7 @@ def lambda_handler(event, context):
             scan_result,
             scan_signature,
             result_time,
+            subject=os.environ.get("AV_STATUS_SNS_SUBJECT_TEMPLATE", None),
         )
 
     metrics.send(
